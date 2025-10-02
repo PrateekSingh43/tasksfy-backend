@@ -1,11 +1,20 @@
 import express from "express"
+import {Request , Response , NextFunction } from "express"
 
+const app = express();
 import dotenv from "dotenv"
 dotenv.config(); 
 const port = process.env.PORT
 
-const app = express();
 
+
+
+app.use(express.json()); 
+
+app.get("/health" , (req:Request , res:Response , next:NextFunction)=>{
+
+	res.status(200).json("ok!"); 
+})
 
 
 

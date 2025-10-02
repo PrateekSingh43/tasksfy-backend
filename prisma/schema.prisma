@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String              @id @default(cuid())
+  email               String              @unique
+  password            String
+  name                String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  tasks               Task[]
+  teams               TeamMember[]
+  ownedTeams          Team[]              @relation("OwnerTeams")
+  notifications       Notification[]
+  permissions         ProjectPermission[]
+  uploadedAttachments Attachment[]        @relation("UploadedAttachments")
+  refreshTokens       RefreshToken[]
+  emailVerifications  EmailVerification[]
+  comments            Comment[]
+  activityLogs        ActivityLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Team {
+  id            String         @id @default(cuid())
+  name          String
+  ownerId       String
+  owner         User           @relation("OwnerTeams", fields: [ownerId], references: [id])
+  members       TeamMember[]
+  projects      Project[]
+  subscriptions Subscription[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  teamId    String
+  role      Role     @default(MEMBER)
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  OWNER
+  MEMBER
+  ADMIN
+  VIEWER
+}
+
+model Project {
+  id          String              @id @default(cuid())
+  name        String
+  team        Team                @relation(fields: [teamId], references: [id])
+  teamId      String
+  tasks       Task[]
+  activityLog ActivityLog[]
+  permissions ProjectPermission[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model ProjectPermission {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id            String         @id @default(cuid())
+  title         String
+  description   String?
+  isComplete    Boolean        @default(false)
+  dueDate       DateTime?
+  assignedTo    User?          @relation(fields: [assignedToId], references: [id])
+  assignedToId  String?
+  project       Project?       @relation(fields: [projectId], references: [id])
+  projectId     String?
+  activityLog   ActivityLog[]
+  attachments   Attachment[]
+  notifications Notification[] @relation("TaskToNotification")
+  comments      Comment[]
+  labels        TaskLabel[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  url          String
+  filename     String
+  fileType     String?
+  fileSize     Int?
+  task         Task?    @relation(fields: [taskId], references: [id])
+  taskId       String?
+  uploadedBy   User     @relation("UploadedAttachments", fields: [uploadedById], references: [id])
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id])
+  userId    String
+  type      NotificationType
+  message   String
+  task      Task?            @relation("TaskToNotification", fields: [taskId], references: [id])
+  taskId    String?
+  read      Boolean          @default(false)
+  remindAt  DateTime?
+  sentAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  REMINDER
+  PROJECT_ACTIVITY
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  task      Task     @relation(fields: [taskId], references: [id])
+  taskId    String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  message   String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Label {
+  id        String      @id @default(cuid())
+  name      String
+  color     String
+  tasks     TaskLabel[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model TaskLabel {
+  task    Task   @relation(fields: [taskId], references: [id])
+  taskId  String
+  label   Label  @relation(fields: [labelId], references: [id])
+  labelId String
+
+  @@id([taskId, labelId])
+}
+
+model Subscription {
+  id        String    @id @default(cuid())
+  team      Team      @relation(fields: [teamId], references: [id])
+  teamId    String
+  plan      String
+  status    String
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
