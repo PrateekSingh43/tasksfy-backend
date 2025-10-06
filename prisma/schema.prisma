@@ -13,7 +13,6 @@ datasource db {
  */
 
 enum Role {
-  OWNER
   ADMIN
   MEMBER
   GUEST
