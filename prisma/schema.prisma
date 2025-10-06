@@ -7,202 +7,555 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id                  String              @id @default(cuid())
-  email               String              @unique
-  password            String
-  name                String?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  tasks               Task[]
-  teams               TeamMember[]
-  ownedTeams          Team[]              @relation("OwnerTeams")
-  notifications       Notification[]
-  permissions         ProjectPermission[]
-  uploadedAttachments Attachment[]        @relation("UploadedAttachments")
-  refreshTokens       RefreshToken[]
-  emailVerifications  EmailVerification[]
-  comments            Comment[]
-  activityLogs        ActivityLog[]
-}
 
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model EmailVerification {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  token     String
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-}
-
-model Team {
-  id            String         @id @default(cuid())
-  name          String
-  ownerId       String
-  owner         User           @relation("OwnerTeams", fields: [ownerId], references: [id])
-  members       TeamMember[]
-  projects      Project[]
-  subscriptions Subscription[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-}
-
-model TeamMember {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  team      Team     @relation(fields: [teamId], references: [id])
-  teamId    String
-  role      Role     @default(MEMBER)
-  updatedAt DateTime @updatedAt
-}
+/**
+ * ===================== ENUMS =====================
+ */
 
 enum Role {
   OWNER
-  MEMBER
   ADMIN
-  VIEWER
+  MEMBER
+  GUEST
 }
 
-model Project {
-  id          String              @id @default(cuid())
-  name        String
-  team        Team                @relation(fields: [teamId], references: [id])
-  teamId      String
-  tasks       Task[]
-  activityLog ActivityLog[]
-  permissions ProjectPermission[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+enum PermissionAction {
+  MANAGE_TEAM_SETTINGS
+  MANAGE_TEAM_MEMBERS
+  MANAGE_BILLING
+  CREATE_PROJECT
+  DELETE_PROJECT
+  CREATE_TASK
+  EDIT_TASK
+  DELETE_TASK
+  ASSIGN_TASK
 }
 
-model ProjectPermission {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  project   Project  @relation(fields: [projectId], references: [id])
-  projectId String
-  role      Role     @default(MEMBER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  REVIEW
+  BLOCKED
+  DONE
+  ARCHIVED
 }
 
-model Task {
-  id            String         @id @default(cuid())
-  title         String
-  description   String?
-  isComplete    Boolean        @default(false)
-  dueDate       DateTime?
-  assignedTo    User?          @relation(fields: [assignedToId], references: [id])
-  assignedToId  String?
-  project       Project?       @relation(fields: [projectId], references: [id])
-  projectId     String?
-  activityLog   ActivityLog[]
-  attachments   Attachment[]
-  notifications Notification[] @relation("TaskToNotification")
-  comments      Comment[]
-  labels        TaskLabel[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  deletedAt     DateTime?
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
-model Attachment {
-  id           String   @id @default(cuid())
-  url          String
-  filename     String
-  fileType     String?
-  fileSize     Int?
-  task         Task?    @relation(fields: [taskId], references: [id])
-  taskId       String?
-  uploadedBy   User     @relation("UploadedAttachments", fields: [uploadedById], references: [id])
-  uploadedById String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model Notification {
-  id        String           @id @default(cuid())
-  user      User             @relation(fields: [userId], references: [id])
-  userId    String
-  type      NotificationType
-  message   String
-  task      Task?            @relation("TaskToNotification", fields: [taskId], references: [id])
-  taskId    String?
-  read      Boolean          @default(false)
-  remindAt  DateTime?
-  sentAt    DateTime?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
 }
 
 enum NotificationType {
   TASK_ASSIGNED
   TASK_UPDATED
-  REMINDER
+  TASK_COMMENTED
   PROJECT_ACTIVITY
+  TEAM_INVITE_RECEIVED
+}
+
+enum PlanInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+/**
+ * ===================== CORE USER + AUTH =====================
+ */
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String? // Optional to support OAuth users without a password.
+  name          String?
+  avatarUrl     String?
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  tfaEnabled    Boolean   @default(false)
+  tfaSecret     String?
+  deletedAt     DateTime?
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  assignedTasks       Task[]               @relation("UserAssignedTasks")
+  createdTasks        Task[]               @relation("UserCreatedTasks")
+  teams               TeamMember[]
+  sentInvites         Invite[]             @relation("UserSentInvites")
+  ownedTeams          Team[]               @relation("UserOwnedTeams")
+  projectPermissions  ProjectPermission[]
+  uploadedAttachments Attachment[]         @relation("UserUploadedAttachments")
+  refreshTokens       RefreshToken[]
+  emailVerifications  EmailVerification[]
+  notifications       Notification[]
+  comments            Comment[]
+  activityLogs        ActivityLog[]
+  apiKeys             ApiKey[]
+  oauthAccounts       UserOAuthAccount[]
+  passwordResetTokens PasswordResetToken[]
+  addedPaymentMethods PaymentMethod[]      @relation("UserAddedPaymentMethods")
+  createdProjects     Project[]            @relation("UserCreatedProjects")
+  settings            UserSettings?
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model UserOAuthAccount {
+  id                String   @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+/**
+ * ===================== TEAMS, ROLES, INVITES =====================
+ */
+
+model Team {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique // Refined: Mandatory for clean URLs.
+  description String?
+  ownerId     String
+  owner       User      @relation("UserOwnedTeams", fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  members      TeamMember[]
+  projects     Project[]
+  invites      Invite[]
+  labels       Label[]
+  settings     TeamSettings?
+  customRoles  TeamRole[]
+  activityLogs ActivityLog[]
+  apiKeys      ApiKey[]
+
+  // Billing Relations
+  subscription   Subscription?
+  paymentMethods PaymentMethod[]
+  invoices       Invoice[]
+
+  @@unique([ownerId, name])
+  @@index([slug])
+}
+
+model TeamMember {
+  id         String    @id @default(cuid())
+  teamId     String
+  team       Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role      @default(MEMBER) // Base role
+  teamRoleId String? // Granular custom role
+  teamRole   TeamRole? @relation(fields: [teamRoleId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model TeamRole {
+  id          String   @id @default(cuid())
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  permissions TeamRolePermission[]
+  members     TeamMember[]
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model Invite {
+  id          String       @id @default(cuid())
+  email       String
+  teamId      String
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitedById String
+  invitedBy   User         @relation("UserSentInvites", fields: [invitedById], references: [id], onDelete: Cascade)
+  role        Role         @default(MEMBER)
+  tokenHash   String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  createdAt   DateTime     @default(now())
+
+  @@unique([email, teamId])
+  @@index([teamId])
+}
+
+/**
+ * ===================== PERMISSIONS / RBAC (Refined) =====================
+ */
+
+model Permission {
+  id          String           @id @default(cuid())
+  action      PermissionAction @unique
+  description String
+  createdAt   DateTime         @default(now())
+
+  // Relations
+  teamRolePermissions TeamRolePermission[]
+}
+
+model TeamRolePermission {
+  teamRoleId   String
+  teamRole     TeamRole   @relation(fields: [teamRoleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([teamRoleId, permissionId])
+}
+
+/**
+ * ===================== PROJECTS =====================
+ */
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  teamId      String
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User      @relation("UserCreatedProjects", fields: [createdById], references: [id], onDelete: Restrict)
+  archived    Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  tasks        Task[]
+  activityLogs ActivityLog[]
+  permissions  ProjectPermission[]
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model ProjectPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role      Role     @default(MEMBER) // Project-specific role override
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+}
+
+/**
+ * ===================== TASKS & RELATED =====================
+ */
+
+model Task {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  dueDate      DateTime?
+  position     Float        @default(0)
+  projectId    String
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedToId String?
+  assignedTo   User?        @relation("UserAssignedTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById  String
+  createdBy    User         @relation("UserCreatedTasks", fields: [createdById], references: [id], onDelete: Restrict)
+  deletedAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  attachments   Attachment[]
+  notifications Notification[]
+  comments      Comment[]
+  activityLogs  ActivityLog[]
+  labels        TaskLabel[]
+
+  @@index([projectId, status])
+  @@index([assignedToId])
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  content   String
-  task      Task     @relation(fields: [taskId], references: [id])
-  taskId    String
-  author    User     @relation(fields: [authorId], references: [id])
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  content         String
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId        String?
+  author          User?     @relation(fields: [authorId], references: [id], onDelete: SetNull) // Refined: Preserve comments on user delete
+  parentCommentId String?
+  parentComment   Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: NoAction) // Refined: Avoid cycles on delete
+  replies         Comment[] @relation("CommentReplies")
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([taskId])
+  @@index([authorId])
 }
 
-model ActivityLog {
-  id        String   @id @default(cuid())
-  message   String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  taskId    String?
-  task      Task?    @relation(fields: [taskId], references: [id])
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id])
-  createdAt DateTime @default(now())
+model Attachment {
+  id              String    @id @default(cuid())
+  url             String
+  filename        String
+  mimeType        String
+  fileSize        Int
+  storageProvider String
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedById    String
+  uploadedBy      User      @relation("UserUploadedAttachments", fields: [uploadedById], references: [id], onDelete: Cascade)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([taskId])
 }
 
 model Label {
   id        String      @id @default(cuid())
   name      String
   color     String
+  teamId    String
+  team      Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
   tasks     TaskLabel[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+
+  @@unique([teamId, name])
 }
 
 model TaskLabel {
-  task    Task   @relation(fields: [taskId], references: [id])
   taskId  String
-  label   Label  @relation(fields: [labelId], references: [id])
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([taskId, labelId])
 }
 
-model Subscription {
-  id        String    @id @default(cuid())
-  team      Team      @relation(fields: [teamId], references: [id])
+/**
+ * ===================== NOTIFICATIONS & LOGS =====================
+ */
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  recipient   User             @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  message     String
+  entityId    String // Generic ID for the related entity (e.g., taskId, projectId)
+  entityType  String // e.g., "TASK", "PROJECT"
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  Task        Task?            @relation(fields: [taskId], references: [id])
+  taskId      String?
+
+  @@index([recipientId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  message   String
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull) // Refined: Preserve log on actor delete
   teamId    String
-  plan      String
-  status    String
-  startDate DateTime
-  endDate   DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([teamId, createdAt(sort: Desc)])
+  @@index([actorId])
+}
+
+// Added: For performance, move old logs here via a background job.
+model ActivityLogArchive {
+  id         String   @id @default(cuid())
+  action     String
+  message    String
+  actorId    String?
+  teamId     String
+  projectId  String?
+  taskId     String?
+  createdAt  DateTime
+  archivedAt DateTime @default(now())
+}
+
+/**
+ * ===================== BILLING / INVOICING (Added) =====================
+ */
+
+model Plan {
+  id            String         @id @default(cuid())
+  key           String         @unique // e.g., "free", "pro", "enterprise"
+  name          String
+  description   String?
+  priceCents    Int
+  currency      String         @default("USD")
+  interval      PlanInterval
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  teamId                 String             @unique
+  team                   Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                 SubscriptionStatus
+  externalSubscriptionId String?            @unique // ID from payment provider like Stripe
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  canceledAt             DateTime?
+  endedAt                DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  invoices               Invoice[]
+}
+
+model PaymentMethod {
+  id                      String   @id @default(cuid())
+  teamId                  String
+  team                    Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  addedByUserId           String
+  addedByUser             User     @relation("UserAddedPaymentMethods", fields: [addedByUserId], references: [id], onDelete: Restrict)
+  provider                String // e.g., "stripe"
+  providerPaymentMethodId String   @unique
+  type                    String // e.g., "card"
+  last4                   String?
+  brand                   String?
+  expMonth                Int?
+  expYear                 Int?
+  isDefault               Boolean  @default(false)
+  createdAt               DateTime @default(now())
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  teamId            String
+  team              Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  invoiceNumber     String        @unique
+  amountCents       Int
+  currency          String
+  status            InvoiceStatus
+  dueDate           DateTime?
+  paidAt            DateTime?
+  externalInvoiceId String?       @unique // ID from payment provider
+  lineItems         Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+/**
+ * ===================== API KEYS & SETTINGS =====================
+ */
+
+model ApiKey {
+  id          String             @id @default(cuid())
+  name        String
+  keyHash     String             @unique
+  prefix      String             @unique
+  teamId      String
+  team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  scopes      PermissionAction[] // Simple scopes for API keys are acceptable
+  revoked     Boolean            @default(false)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime           @default(now())
+}
+
+model UserSettings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  settings  Json
+  updatedAt DateTime @updatedAt
+}
+
+model TeamSettings {
+  id        String   @id @default(cuid())
+  teamId    String   @unique
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  settings  Json
+  updatedAt DateTime @updatedAt
 }
