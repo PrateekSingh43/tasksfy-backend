@@ -1,11 +1,11 @@
 // src/auth/services/auth.services.ts
-import prisma from "../../utils/prisma";
-import { hashPassword, verifyPassword } from "../../utils/hash";
-import { genAccessToken, createRefreshTokenRow, setRefreshCookie, verifyRefreshToken } from "../../utils/token";
+import prisma from "../utils/prisma";
+import { hashPassword, verifyPassword } from "../utils/hash";
+import { genAccessToken, createRefreshTokenRow, setRefreshCookie, verifyRefreshToken } from "../utils/token";
 import { Prisma } from "@prisma/client";
-import { rotate } from "../../config/env";
 
-import { Response } from "express";
+
+import { Response , Request , NextFunction} from "express";
 
 export async function signupService(payload: { email: string; password: string; name?: string }, res: any, opts?: { autoLogin?: boolean }) {
 	const { email, password, name } = payload;

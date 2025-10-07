@@ -1,7 +1,8 @@
 import dotenv from "dotenv";
+dotenv.config();
 import { z } from "zod";
 
-dotenv.config();
+
 
 const envSchema = z.object({
   PORT: z.string().optional().transform((val) => Number(val) || 5000),

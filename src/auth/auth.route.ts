@@ -1,11 +1,11 @@
 
 
 import { Router } from  "express";
-import { loginSchema, signupSchema } from "../validation/auth.validation";
-import { validateBody } from "../../middlewares/Validation/middleware.ValidateBody";
-import { loginController, refreshTokenController, signupController , logoutController } from "../controller/auth.controller";
+import { loginSchema, signupSchema } from "./auth.validation";
+import { validateBody } from "../middlewares/middleware.ValidateBody";
+import { loginController, refreshTokenController, signupController , logoutController } from "./auth.controller";
 
-import authMiddleware from "../../middlewares/auth/middleware.auth";
+import authMiddleware from "../middlewares/middleware.auth";
 
 
 const router = Router()

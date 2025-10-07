@@ -1,10 +1,10 @@
 // src/auth/controller/auth.controller.ts
 import { Request, Response, NextFunction } from "express";
-import * as authService from "../services/auth.services";
-import { rotate } from "../../config/env";
-import { logoutService } from "../services/auth.services";
+import * as authService from "./auth.services";
+import { rotate } from "../config/env";
+import { logoutService } from "./auth.services";
 
-
+import { AuthenticatedRequest } from "../types/auth.types";
 
 // signup Controller 
 
@@ -46,9 +46,12 @@ export async function refreshTokenController(req: Request, res: Response, next: 
 
 
 export async function logoutController(req: Request, res: Response) {
-  if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-  await logoutService(req.user.id, res);
-  res.status(204).end();
+	// Use a type assertion to access the user property
+	const userId = (req as AuthenticatedRequest).user?.id;
+	if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+	await logoutService(userId, res);
+	res.status(204).end();
 }
 
 
