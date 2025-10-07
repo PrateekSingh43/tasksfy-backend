@@ -8,6 +8,7 @@ const envSchema = z.object({
   PORT: z.string().optional().transform((val) => Number(val) || 5000),
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string(),
+  NODE_ENV:z.string(),
   REFRESH_SECRET: z.string(),
   JWT_EXPIRES_IN: z.string().optional().default("7d"),
   MAIL_USER: z.string(),
@@ -24,6 +25,7 @@ const parsedEnv = envSchema.parse(process.env);
 export const port: number = parsedEnv.PORT;
 export const databaseUrl: string = parsedEnv.DATABASE_URL;
 export const JWT_SECRET: string = parsedEnv.JWT_SECRET;
+export const NODE_ENV:string = parsedEnv.NODE_ENV; 
 export const REFRESH_SECRET: string = parsedEnv.REFRESH_SECRET;
 export const jwtExpiresIn: string = parsedEnv.JWT_EXPIRES_IN;
 export const mailUser: string = parsedEnv.MAIL_USER;

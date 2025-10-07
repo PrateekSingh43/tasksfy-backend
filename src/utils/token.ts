@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import prisma from './prisma';
-import { REFRESH_SECRET, JWT_SECRET } from '../config/env';
+import { REFRESH_SECRET, JWT_SECRET , NODE_ENV} from '../config/env';
 
 // HMAC for refresh tokens
 export const hmac = (raw: string) =>
@@ -33,7 +33,7 @@ export async function createRefreshTokenRow(userId: string, days = 30) {
 export function setRefreshCookie(res: any, raw: string, expiresAt: Date) {
   res.cookie('taskify_refresh', raw, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure:NODE_ENV === "production",
     sameSite: 'lax',
     maxAge: expiresAt.getTime() - Date.now(),
     path: '/api',

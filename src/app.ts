@@ -8,13 +8,12 @@ import pino from "pino-http"
 import cors from "cors"
 
 const app = express();
-app.use(pino())
-
-app.use(express.json()); 
-app.use(authRouter);
-app.use(cors())
-
 app.use(cookieParser());
+app.use(cors());
+app.use(express.json());
+app.use(pino());
+app.use(authRouter);
+
 
 app.get('/', (req:Request, res:Response) => {
   req.log.info('something')
